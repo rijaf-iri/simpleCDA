@@ -1,0 +1,11 @@
+
+export(get_month_region_netcdf_data)
+export(get_season_region_netcdf_data)
+export(eigen_analysis)
+export(get_PCs_timeSeries)
+export(get_EOFs_spatialPatterns)
+export(plot_EOFs_spatialPatterns)
+export(extract_region_timeSeries)
+export(compute_climatology)
+export(compute_anomalies)
+export(aggregate_netcdf_data)

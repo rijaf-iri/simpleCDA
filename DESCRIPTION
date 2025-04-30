@@ -1,0 +1,19 @@
+Package: simpleCDA
+Version: 1.0
+Title: Simple Climate Data Analysis
+Description: Perform a simple climate data analysis.
+Author: Rija Faniriantsoa <rijaf@iri.columbia.edu>
+Maintainer: Rija Faniriantsoa <rijaf@iri.columbia.com>
+License: MIT + file LICENSE
+Encoding: UTF-8
+Date: 2025-04-25
+Depends: R (>= 4.0.0),
+Imports: 
+    ncdf4,
+    propagate,
+    RSpectra,
+    RColorBrewer,
+    fields,
+    maps,
+    methods
+RoxygenNote: 7.3.2
