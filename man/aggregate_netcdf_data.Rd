@@ -41,7 +41,7 @@ aggregate_netcdf_data(
 
 \item{in_nc_file_fromat}{character, format of the input netCDF file name, the year, month, dekad and ady must be replaced by \code{\%s}.
 The date format of the netCDF file names must be in the following order: year goes first, then month, and finally dekad or day.
-Example: for \emph{ersst.v5.202401.nc} the file name format should be \emph{ersst.v5.\%s\%s.nc}.}
+Example: for \emph{ersst.v5.202401.nc} the file name format should be \emph{'ersst.v5.\%s\%s.nc'}.}
 
 \item{out_path_dir_nc}{character, full path to the folder to store the aggregated data.}
 

@@ -2,13 +2,15 @@ get_latlon_dimnames <- function(nc){
     dim_names <- sapply(nc$dim, '[[', 'name')
     dims <- tolower(dim_names)
     lo <- grep('lon', dims)
-    if(length(lo) == 0) lo <- which(dims == 'x')
+    if(length(lo) == 0)
+        lo <- which(dims == 'x')
     if(length(lo) == 0)
         stop('Unknown longitude dimension name.')
     lon <- dim_names[lo[1]]
 
     la <- grep('lat', dims)
-    if(length(la) == 0) la <- which(dims == 'y')
+    if(length(la) == 0)
+        la <- which(dims == 'y')
     if(length(la) == 0)
         stop('Unknown latitude dimension name.')
     lat <- dim_names[la[1]]
@@ -94,7 +96,8 @@ extract_filename_dates <- function(filenames, fileformat){
         }
     }
     check <- grepl('[^[:digit:]]', ret)
-    if(any(check)) stop('Unambiguous netCDF file names format.')
+    if(any(check))
+        stop('Unambiguous netCDF file names format.')
 
     return(ret)
 }

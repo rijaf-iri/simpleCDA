@@ -21,14 +21,14 @@ get_season_region_netcdf_data(
 \item{path_dir_data}{character, full path to the folder containing the netCDF files.}
 
 \item{nc_file_fromat}{character, format of the netCDF file name, the year and month must be replaced by \code{\%s}.
-Example: for \emph{ersstv5_2024-01_2024-03.nc} the file name format should be \emph{ersstv5_\%s-\%s_\%s-\%s.nc}.}
+Example: for \emph{ersstv5_2024-01_2024-03.nc} the file name format should be \emph{'ersstv5_\%s-\%s_\%s-\%s.nc'}.}
 
 \item{years_range}{an integer vector of length 2, the start and end year of the data to be extracted.
-Default \code{NULL}, using the whole period available in the dataset.}
+Default \code{NULL}, get the whole period available in the dataset.}
 
 \item{region_bbox}{a numeric vector of length 4, the bounding box of the region to be extracted,
 with longitude min, latitude min, longitude max and latitude max of the region (West, South, East, North).
-Default \code{NULL}, no extraction performed, using the entire region from the dataset.}
+Default \code{NULL}, no extraction performed, get the entire region from the dataset.}
 
 \item{var_name}{character, name of the variable to be read from the netCDF data. If unspecified or left \code{NA},
 the first variable available in the netCDF data will be taken.}
@@ -52,7 +52,7 @@ Read seasonal netCDF data for a specific season over a defined region.
 \examples{
 \dontrun{
 # Extracting the SST data for the season DJF for the period 1981-2020 
-# over the region longitude: [170 W - 120 W] and latitude [5 S - 5 N]
+# over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
 
 path_dir_data = '/home/data/ERSSTv5_seasonal'
 nc_file_fromat = 'ersstv5_\%s-\%s_\%s-\%s.nc'

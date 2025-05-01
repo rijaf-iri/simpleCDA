@@ -46,7 +46,7 @@ Extract time series for a specific month or season over a defined region.
 \examples{
 \dontrun{
 # Extracting the first PCs of SST for July for the period 1981-2020 
-# averaged over the region longitude: [170 W - 120 W] and latitude [5 S - 5 N]
+# over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
 
 path_dir_data = '/home/data/ERSSTv5'
 nc_file_fromat = 'ersst.v5.\%s\%s.nc'
