@@ -6,19 +6,20 @@
 \usage{
 get_month_region_netcdf_data(
   month,
-  path_dir_data,
+  nc_path_dir,
   nc_file_fromat,
   years_range = NULL,
   region_bbox = NULL,
   var_name = NA,
   lon_name = NA,
-  lat_name = NA
+  lat_name = NA,
+  ...
 )
 }
 \arguments{
 \item{month}{integer, the month to be read, must be from 1 to 12.}
 
-\item{path_dir_data}{character, full path to the folder containing the netCDF files.}
+\item{nc_path_dir}{character, full path to the folder containing the netCDF files.}
 
 \item{nc_file_fromat}{character, format of the netCDF file name, the year and month must be replaced by \code{\%s}.
 Example: for \emph{ersst.v5.202401.nc} the file name format should be \emph{'ersst.v5.\%s\%s.nc'}.}
@@ -36,6 +37,13 @@ the first variable available in the netCDF data will be taken.}
 \item{lon_name}{character, the name of the longitude dimension. If unspecified or left \code{NA}, it will be detected.}
 
 \item{lat_name}{character, the name of the latitude dimension. Same as \code{lon_name}.}
+
+\item{...}{pairs of arguments, providing the names and values of any extra dimensions to be extracted.
+The arguments should be in the format \code{<information about the dimension>_name} for the name of the dimension
+and \code{<information about the dimension>_value} for the value to be extracted from that dimension.
+Example: if your netCDF data has a pressure levels dimension named \code{"pres"} having the values from 1000 to 10 hPa,
+if you want to extract the data at the pressure level 850 hPa, 
+the pair of arguments would be \code{plev_name = "pres"} and \code{plev_value = 850}.}
 }
 \value{
 This returns an object of class \code{scda_data}. The object has the following elements:
@@ -54,13 +62,25 @@ Read monthly netCDF data for a specific month over a defined region.
 # Extracting the SST data for July for the period 1981-2020 
 # over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
 
-path_dir_data = '/home/data/ERSSTv5'
+nc_path_dir = '/home/data/ERSSTv5'
 nc_file_fromat = 'ersst.v5.\%s\%s.nc'
 years_range = c(1981, 2020)
 region_bbox = c(-170, -5, -120, 5)
 
-grd_data = get_month_region_netcdf_data(7, path_dir_data, nc_file_fromat,
+grd_data = get_month_region_netcdf_data(7, nc_path_dir, nc_file_fromat,
                                         years_range, region_bbox)
+
+# Extracting the U-wind data for July for the period 1981-2020 at 850 hPa
+# over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
+
+nc_path_dir = '/home/data/MONTHLY/UGRD'
+nc_file_fromat = 'u_\%s\%s.nc'
+years_range = c(1981, 2020)
+region_bbox = c(-170, -5, -120, 5)
+
+ugrd_data = get_month_region_netcdf_data(7, nc_path_dir, nc_file_fromat,
+                                         years_range, region_bbox,
+                                         alt_name = 'P', alt_value = 850)
 }
 
 }

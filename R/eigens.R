@@ -21,12 +21,12 @@
 #' # Extracting the SST data for July for the period 1981-2020 
 #' # over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
 #' 
-#' path_dir_data = '/home/data/ERSSTv5'
+#' nc_path_dir = '/home/data/ERSSTv5'
 #' nc_file_fromat = 'ersst.v5.%s%s.nc'
 #' years_range = c(1981, 2020)
 #' region_bbox = c(-170, -5, -120, 5)
 #' 
-#' grd_data = get_month_region_netcdf_data(7, path_dir_data, nc_file_fromat,
+#' grd_data = get_month_region_netcdf_data(7, nc_path_dir, nc_file_fromat,
 #'                                         years_range, region_bbox)
 #' 
 #' eigen_data = eigen_analysis(grd_data)
@@ -155,10 +155,10 @@ get_EOFs_spatialPatterns <- function(eigen_data, k){
 #'
 #' @examples
 #' \dontrun{
-#' path_dir_data = '/home/data/ERSSTv5'
+#' nc_path_dir = '/home/data/ERSSTv5'
 #' nc_file_fromat = 'ersst.v5.%s%s.nc'
 #' years_range = c(1981, 2020)
-#' grd_data = get_month_region_netcdf_data(12, path_dir_data, nc_file_fromat, years_range)
+#' grd_data = get_month_region_netcdf_data(12, nc_path_dir, nc_file_fromat, years_range)
 #' eigen_data = eigen_analysis(grd_data)
 #' plot_EOFs_spatialPatterns(eigen_data, 2)
 #' }

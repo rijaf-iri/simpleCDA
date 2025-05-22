@@ -5,17 +5,18 @@
 \title{Read annual netCDF dataset.}
 \usage{
 get_annual_region_netcdf_data(
-  path_dir_data,
+  nc_path_dir,
   nc_file_fromat,
   years_range = NULL,
   region_bbox = NULL,
   var_name = NA,
   lon_name = NA,
-  lat_name = NA
+  lat_name = NA,
+  ...
 )
 }
 \arguments{
-\item{path_dir_data}{character, full path to the folder containing the netCDF files.}
+\item{nc_path_dir}{character, full path to the folder containing the netCDF files.}
 
 \item{nc_file_fromat}{character, format of the netCDF file name, the year must be replaced by \code{\%s}.
 Example: for \emph{chirps_2024.nc} the file name format should be \emph{'chirps_\%s.nc'}.}
@@ -33,6 +34,13 @@ the first variable available in the netCDF data will be taken.}
 \item{lon_name}{character, the name of the longitude dimension. If unspecified or left \code{NA}, it will be detected.}
 
 \item{lat_name}{character, the name of the latitude dimension. Same as \code{lon_name}.}
+
+\item{...}{pairs of arguments, providing the names and values of any extra dimensions to be extracted.
+The arguments should be in the format \code{<information about the dimension>_name} for the name of the dimension
+and \code{<information about the dimension>_value} for the value to be extracted from that dimension.
+Example: if your netCDF data has a pressure levels dimension named \code{"pres"} having the values from 1000 to 10 hPa,
+if you want to extract the data at the pressure level 850 hPa, 
+the pair of arguments would be \code{plev_name = "pres"} and \code{plev_value = 850}.}
 }
 \value{
 This returns an object of class \code{scda_data}. The object has the following elements:
@@ -51,12 +59,12 @@ Read annual netCDF data over a defined region.
 # Extracting CHIRPSv2.0 annual rainfall from global data for the period 1991-2020 
 # over Madagascar: longitude [42 E - 52 E] and latitude [26 S - 11.5 S]
 
-path_dir_data = '/home/data/CHIRPSv2.0_annual'
+nc_path_dir = '/home/data/CHIRPSv2.0_annual'
 nc_file_fromat = 'chirps_\%s.nc'
 years_range = c(1991, 2020)
 region_bbox = c(42, -26, 52, -11.5)
 
-grd_data = get_annual_region_netcdf_data(path_dir_data, nc_file_fromat,
+grd_data = get_annual_region_netcdf_data(nc_path_dir, nc_file_fromat,
                                         years_range, region_bbox)
 }
 

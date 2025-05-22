@@ -35,10 +35,10 @@ Plot a specific spatial patterns (EOFs) on map.
 }
 \examples{
 \dontrun{
-path_dir_data = '/home/data/ERSSTv5'
+nc_path_dir = '/home/data/ERSSTv5'
 nc_file_fromat = 'ersst.v5.\%s\%s.nc'
 years_range = c(1981, 2020)
-grd_data = get_month_region_netcdf_data(12, path_dir_data, nc_file_fromat, years_range)
+grd_data = get_month_region_netcdf_data(12, nc_path_dir, nc_file_fromat, years_range)
 eigen_data = eigen_analysis(grd_data)
 plot_EOFs_spatialPatterns(eigen_data, 2)
 }

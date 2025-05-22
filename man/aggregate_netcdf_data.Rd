@@ -9,18 +9,19 @@ aggregate_netcdf_data(
   out_time_res,
   start_date,
   end_date,
-  in_path_dir_nc,
+  in_nc_path_dir,
   in_nc_file_fromat,
-  out_path_dir_nc,
+  out_nc_path_dir,
   out_nc_file_prefix = NULL,
+  out_nc_variable = NULL,
   aggregate_fun = sum,
   ...,
   season_length = 3,
   min_frac = 0.95,
-  nc_out_variable = NULL,
   var_name = NA,
   lon_name = NA,
-  lat_name = NA
+  lat_name = NA,
+  extra_dim = NULL
 )
 }
 \arguments{
@@ -37,15 +38,18 @@ aggregate_netcdf_data(
 
 \item{end_date}{character, the end date of the input netCDF to which the data will be aggregate. Same format as \code{start_date}.}
 
-\item{in_path_dir_nc}{character, full path to the folder containing the input netCDF dataset.}
+\item{in_nc_path_dir}{character, full path to the folder containing the input netCDF dataset.}
 
 \item{in_nc_file_fromat}{character, format of the input netCDF file name, the year, month, dekad and ady must be replaced by \code{\%s}.
 The date format of the netCDF file names must be in the following order: year goes first, then month, and finally dekad or day.
 Example: for \emph{ersst.v5.202401.nc} the file name format should be \emph{'ersst.v5.\%s\%s.nc'}.}
 
-\item{out_path_dir_nc}{character, full path to the folder to store the aggregated data.}
+\item{out_nc_path_dir}{character, full path to the folder to store the aggregated data.}
 
 \item{out_nc_file_prefix}{character, a string to be used as a prefix for the aggregated netCDF file names. Default \code{NULL}, the variable name will be used as file name prefix.}
+
+\item{out_nc_variable}{a named list to define the output netCDF variable, a list of arguments to be passed on the function \code{\link[ncdf4]{ncvar_def}} of the package \pkg{ncdf4}.
+Default \code{NULL}, the output netCDF variable will be created from the input netCDF variable.}
 
 \item{aggregate_fun}{a function to be used to aggregate the data.}
 
@@ -55,15 +59,19 @@ Example: for \emph{ersst.v5.202401.nc} the file name format should be \emph{'ers
 
 \item{min_frac}{float, the minimum fraction of non missing data that must be present within each output time resolution.}
 
-\item{nc_out_variable}{a named list to define the output netCDF variable, a list of options to be passed on the function \code{\link[ncdf4]{ncvar_def}} of the package \pkg{ncdf4}.
-Default \code{NULL}, the output netCDF variable will be created from the input netCDF variable.}
-
 \item{var_name}{character, name of the variable to be read from the input netCDF dataset. If unspecified or left \code{NA},
 the first variable available in the netCDF data will be taken.}
 
 \item{lon_name}{character, the name of the longitude dimension from the input netCDF. If unspecified or left \code{NA}, it will be detected.}
 
 \item{lat_name}{character, the name of the latitude dimension from the input netCDF. Same as \code{lon_name}.}
+
+\item{extra_dim}{a named list of pairs of arguments, providing the names and values of any extra dimensions to be extracted.
+The name of the elements of the list should be in the format \code{<information about the dimension>_name} for the name of the dimension
+and \code{<information about the dimension>_value} for the value to be extracted from that dimension.
+Example: if your netCDF data has a pressure levels dimension named \code{"pres"} having the values from 1000 to 10 hPa,
+if you want to extract the data at the pressure level 850 hPa, 
+\code{extra_dim} would be \code{extra_dim = list(plev_name = "pres", plev_value = 850)}.}
 }
 \description{
 Aggregate netCDF dataset to monthly or seasonal.
@@ -72,25 +80,25 @@ Aggregate netCDF dataset to monthly or seasonal.
 \dontrun{
 # Computing seasonal (3-months) average SST from 1981 to 2024
 
-in_path_dir_nc = '/home/data/ERSSTv5'
+in_nc_path_dir = '/home/data/ERSSTv5'
 in_nc_file_fromat = 'ersst.v5.\%s\%s.nc'
-out_path_dir_nc = '/home/data/ERSSTv5_seasonal'
+out_nc_path_dir = '/home/data/ERSSTv5_seasonal'
 
 aggregate_netcdf_data('monthly', 'seasonal',
                       '1981-01', '2024-12',
-                      in_path_dir_nc, in_nc_file_fromat,
-                      out_path_dir_nc,
+                      in_nc_path_dir, in_nc_file_fromat,
+                      out_nc_path_dir,
                       aggregate_fun = mean, na.rm = TRUE,
                       season_length = 3,
                       min_frac = 0.95)
 
 # Computing the annual number of rainy days from 1991 to 2020
 
-in_path_dir_nc = '/home/data/CHIRPSv2_daily' 
+in_nc_path_dir = '/home/data/CHIRPSv2_daily' 
 in_nc_file_fromat = 'chirps_\%s\%s\%s.nc'
-out_path_dir_nc = '/home/data/CHIRPSv2_rainy_days'
+out_nc_path_dir = '/home/data/CHIRPSv2_rainy_days'
 out_nc_file_prefix = 'rain_days'
-nc_out_variable = list(name = 'rainy_days', units = 'days',
+out_nc_variable = list(name = 'rainy_days', units = 'days',
                        longname = 'Annual number of rainy days',
                        missval = -99, prec = 'short')
 
@@ -101,10 +109,24 @@ number_of_rainy_days <- function(x, threshold){
 
 aggregate_netcdf_data('daily', 'annual',
                       '1991-01-01', '2020-12-31',
-                      in_path_dir_nc, in_nc_file_fromat,
-                      out_path_dir_nc, out_nc_file_prefix,
+                      in_nc_path_dir, in_nc_file_fromat,
+                      out_nc_path_dir, out_nc_file_prefix,
                       aggregate_fun = number_of_rainy_days, threshold = 1.,
-                      nc_out_variable = nc_out_variable)
+                      out_nc_variable = out_nc_variable)
+
+# Computing seasonal (3-months) average for u-wind at the pressure level 850 hPa from 1981 to 2024
+in_nc_path_dir = '/home/data/MONTHLY/UGRD'
+in_nc_file_fromat = 'u_\%s\%s.nc'
+out_nc_path_dir = '/home/data/UGRD_SEASONAL'
+
+aggregate_netcdf_data('monthly', 'seasonal',
+                      '1981-01', '2024-12',
+                      in_nc_path_dir, in_nc_file_fromat,
+                      out_nc_path_dir,
+                      aggregate_fun = mean, na.rm = TRUE,
+                      season_length = 3,
+                      min_frac = 0.95,
+                      extra_dim = list(plev_name = 'P', plev_value = 850))
 }
 
 }

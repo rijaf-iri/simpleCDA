@@ -40,9 +40,9 @@ Compute anomalies for a specific month or season.
 # Standardized anomaly of the SST for the season DJF for the period 1981-2020.
 
 # read the data
-path_dir_data = '/home/data/ERSSTv5_seasonal'
+nc_path_dir = '/home/data/ERSSTv5_seasonal'
 nc_file_fromat = 'ersstv5_\%s-\%s_\%s-\%s.nc'
-grd_data = get_season_region_netcdf_data('12-02', path_dir_data, nc_file_fromat,
+grd_data = get_season_region_netcdf_data('12-02', nc_path_dir, nc_file_fromat,
                                          years_range = c(1981, 2020))
 
 # compute climatology for the period 1991 to 2020

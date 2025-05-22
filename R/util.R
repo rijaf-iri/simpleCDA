@@ -18,16 +18,251 @@ get_latlon_dimnames <- function(nc){
     list(lon = lon, lat = lat)
 }
 
-get_latlon_order <- function(nc, var_name, lon_name, lat_name){
+get_dim_extras <- function(args_n, args_v){
+    args <- lapply(seq_along(args_n), function(i){
+        x <- as.character(args_n[[i]])
+        x <- strsplit(x, '_')[[1]]
+        ix <- x[length(x)]
+        iv <- paste0(x[-length(x)], collapse = '_')
+        list(dim = iv, type = ix, value = args_v[[i]])
+    })
+
+    xdims <- sapply(args, '[[', 'dim')
+    args_f <- lapply(unique(xdims), function(x){
+        v <- args[xdims == x]
+        if(length(v) == 1){
+            type <- if(v[[1]]$type == 'name') 'value' else 'name'
+            type1 <- paste0('"', v[[1]]$dim, '_', type, '"')
+            type2 <- paste0('"', v[[1]]$dim, '_', v[[1]]$type, '".')
+            stop(paste('No', type1, 'found for', type2))
+        }
+        z <- lapply(v, '[[', 'value')
+        names(z) <- sapply(v, '[[', 'type')
+        z
+    })
+
+    return(args_f)
+}
+
+get_dim_ellipsis <- function(...){
+    args_v <- list(...)
+    if(length(args_v) == 0) return(NULL)
+    args_n <- match.call(expand.dots = FALSE)$...
+    xname <- names(args_n)
+    lname <- xname != ""
+    args_n[lname] <- xname[lname]
+    get_dim_extras(args_n, args_v)
+}
+
+get_dim_list <- function(list_dim){
+    if(is.null(list_dim)) return(NULL)
+    args_v <- list_dim
+    args_n <- as.list(names(list_dim))
+    get_dim_extras(args_n, args_v)
+}
+
+get_dim_order <- function(nc, var_name, lon_name, lat_name, dim_dots){
     dim_var <- sapply(nc$var[[var_name]]$dim, '[[', 'name')
     ilon <- which(dim_var == lon_name)
     ilat <- which(dim_var == lat_name)
 
-    list(ilon = ilon, ilat = ilat)
+    dim_order <- list(ilon = ilon, ilat = ilat)
+    dim_extra <- dim_var[!dim_var %in% c(lon_name, lat_name)]
+
+    if(!is.null(dim_dots)){
+        for(i in seq_along(dim_dots)){
+            dname <- dim_dots[[i]]$name
+            if(dname %in% dim_var){
+                dim_order[dname] <- which(dim_var == dname)
+            }else{
+                stop(paste0('There is no dimension named "', dname, '"'))
+            }
+            dim_extra <- dim_extra[dim_extra != dname]
+        }
+    }
+
+    if(length(dim_extra) > 0){
+        for(v in dim_extra){
+           dim_order[v] <- which(dim_var == v)
+        }
+    }
+
+    return(dim_order)
 }
 
-format_longitude <- function(lon){
+get_dim_infos_extract <- function(nc, var_name, lon_name, lat_name, bbox, ...){
+    if(is.na(lon_name) || is.na(lat_name)){
+        xy_name <- get_latlon_dimnames(nc)
+        lon_name <- xy_name$lon
+        lat_name <- xy_name$lat
+    }
+    if(is.na(var_name)){
+        var_name <- nc$var[[1]]$name
+    }
+
+    dim_dots <- get_dim_ellipsis(...)
+    if(!is.null(dim_dots)){
+        for(j in seq_along(dim_dots)){
+            tmp <- nc$dim[[dim_dots[[j]]$name]]$vals
+            if(!any(tmp == dim_dots[[j]]$value)){
+                stop(paste('Wrong value for the dimension',
+                     paste0('"', dim_dots[[j]]$name, '".'),
+                     'Select one of the following values:',
+                     paste0(tmp, collapse = ', '))
+                    )
+            }
+        }
+    }
+
+    pos <- get_dim_order(nc, var_name, lon_name, lat_name, dim_dots)
+    index <- lapply(seq_along(pos), function(i) 1)
+
+    lon <- nc$dim[[lon_name]]$vals
+    lon <- format_longitude_180(lon)
+    lat <- nc$dim[[lat_name]]$vals
+
+    if(!is.null(bbox)){
+        bbox[1] <- format_longitude_180(bbox[1])
+        bbox[3] <- format_longitude_180(bbox[3])
+        plon <- abs(diff(sort(lon)[1:2]))
+        if(abs(bbox[3] - bbox[1]) < plon){
+            clon <- (bbox[1] + bbox[3])/2
+            index[[pos$ilon]] <- find_intervals(clon, lon, plon)
+        }else{
+            index[[pos$ilon]] <- which(lon >= bbox[1] & lon <= bbox[3])
+        }
+
+        plat <- abs(diff(sort(lat)[1:2]))
+        if(abs(bbox[4] - bbox[2]) < plat){
+            clat <- (bbox[2] + bbox[4])/2
+            index[[pos$ilat]] <- find_intervals(clat, lat, plat)
+        }else{
+            index[[pos$ilat]] <- which(lat >= bbox[2] & lat <= bbox[4])
+        }
+    }else{
+        index[[pos$ilon]] <- seq_along(lon)
+        index[[pos$ilat]] <- seq_along(lat)
+        rx <- range(lon)
+        ry <- range(lat)
+        bbox <- c(rx[1], ry[1], rx[2], ry[2])
+    }
+
+    if(!is.null(dim_dots)){
+        for(j in seq_along(dim_dots)){
+            nv <- dim_dots[[j]]$name
+            tmp <- nc$dim[[nv]]$vals
+            np <- pos[[nv]]
+            index[[np]] <- which(tmp == dim_dots[[j]]$value)
+        }
+    }
+
+    lon <- lon[index[[pos$ilon]]]
+    lat <- lat[index[[pos$ilat]]]
+    ox <- order(lon)
+    oy <- order(lat)
+    lon <- lon[ox]
+    lat <- lat[oy]
+    nlon <- length(lon)
+    nlat <- length(lat)
+
+    list(varid = var_name, lon = lon, lat = lat,
+         index = index, pos = pos, ox = ox, oy = oy,
+         nx = nlon, ny = nlat, bbox = bbox)
+}
+
+get_dim_infos_aggregate <- function(nc, var_name, lon_name, lat_name, extra_dim){
+    if(is.na(lon_name) || is.na(lat_name)){
+        xy_name <- get_latlon_dimnames(nc)
+        lon_name <- xy_name$lon
+        lat_name <- xy_name$lat
+    }
+    if(is.na(var_name)){
+        var_name <- nc$var[[1]]$name
+    }
+
+    dim_dots <- get_dim_list(extra_dim)
+    if(!is.null(dim_dots)){
+        for(j in seq_along(dim_dots)){
+            tmp <- nc$dim[[dim_dots[[j]]$name]]$vals
+            if(!any(tmp == dim_dots[[j]]$value)){
+                stop(paste('Wrong value for the dimension',
+                     paste0('"', dim_dots[[j]]$name, '".'),
+                     'Select one of the following values:',
+                     paste0(tmp, collapse = ', '))
+                    )
+            }
+        }
+    }
+
+    pos <- get_dim_order(nc, var_name, lon_name, lat_name, dim_dots)
+    index <- lapply(seq_along(pos), function(i) 1)
+
+    lon <- nc$dim[[lon_name]]$vals
+    lon <- format_longitude_180(lon)
+    lat <- nc$dim[[lat_name]]$vals
+
+    index[[pos$ilon]] <- seq_along(lon)
+    index[[pos$ilat]] <- seq_along(lat)
+    if(!is.null(dim_dots)){
+        for(j in seq_along(dim_dots)){
+            nv <- dim_dots[[j]]$name
+            tmp <- nc$dim[[nv]]$vals
+            np <- pos[[nv]]
+            index[[np]] <- which(tmp == dim_dots[[j]]$value)
+        }
+    }
+
+    ox <- order(lon)
+    oy <- order(lat)
+    lon <- lon[ox]
+    lat <- lat[oy]
+    nlon <- length(lon)
+    nlat <- length(lat)
+
+    list(varid = var_name, lon = lon, lat = lat,
+         pos = pos, index = index, ox = ox,
+         oy = oy, nx = nlon, ny = nlat)
+}
+
+extract_nc_data <- function(nc_array, info){
+    args <- c(list(x = nc_array), info$index,
+              list(drop = TRUE))
+    tmp <- do.call(`[`, args)
+
+    if(info$pos$ilon < info$pos$ilat){
+        dim(tmp) <- c(info$nx, info$ny)
+        tmp <- tmp[info$ox, info$oy, drop = FALSE]
+    }else{
+        dim(tmp) <- c(info$ny, info$nx)
+        tmp <- tmp[info$oy, info$ox, drop = FALSE]
+        tmp <- t(tmp)
+    }
+
+    return(tmp)
+}
+
+find_intervals <- function(x, vec, px = NA){
+    nl <- length(vec)
+    ov <- order(vec)
+    vec <- vec[ov]
+    if(is.na(px)) px <- abs(diff(vec[1:2]))
+    tmp <- c(vec[1] - px/2, vec + px/2)
+    ix <- findInterval(x, tmp,
+                       rightmost.closed = TRUE,
+                       left.open = TRUE)
+    l <- ix == 0
+    if(any(l)) ix[l] <- 1
+    r <- ix > nl
+    if(any(r)) ix[r] <- nl
+    ov[ix]
+}
+
+format_longitude_180 <- function(lon){
     ((lon + 180) %% 360) - 180
+}
+
+format_longitude_360 <- function(lon){
+    (lon + 360) %% 360
 }
 
 format_pattern <- function(x){

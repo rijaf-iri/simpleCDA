@@ -3,7 +3,7 @@
 #' Read monthly netCDF data for a specific month over a defined region.
 #' 
 #' @param month integer, the month to be read, must be from 1 to 12.
-#' @param path_dir_data character, full path to the folder containing the netCDF files.
+#' @param nc_path_dir character, full path to the folder containing the netCDF files.
 #' @param nc_file_fromat character, format of the netCDF file name, the year and month must be replaced by \code{\%s}.
 #' Example: for \emph{ersst.v5.202401.nc} the file name format should be \emph{'ersst.v5.\%s\%s.nc'}.
 #' @param years_range an integer vector of length 2, the start and end year of the data to be extracted.
@@ -15,6 +15,12 @@
 #' the first variable available in the netCDF data will be taken.
 #' @param lon_name character, the name of the longitude dimension. If unspecified or left \code{NA}, it will be detected. 
 #' @param lat_name character, the name of the latitude dimension. Same as \code{lon_name}.
+#' @param ... pairs of arguments, providing the names and values of any extra dimensions to be extracted.
+#' The arguments should be in the format \code{<information about the dimension>_name} for the name of the dimension
+#' and \code{<information about the dimension>_value} for the value to be extracted from that dimension.
+#' Example: if your netCDF data has a pressure levels dimension named \code{"pres"} having the values from 1000 to 10 hPa,
+#' if you want to extract the data at the pressure level 850 hPa, 
+#' the pair of arguments would be \code{plev_name = "pres"} and \code{plev_value = 850}.
 #' 
 #' @return This returns an object of class \code{scda_data}. The object has the following elements:
 #' \itemize{
@@ -29,28 +35,40 @@
 #' # Extracting the SST data for July for the period 1981-2020 
 #' # over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
 #' 
-#' path_dir_data = '/home/data/ERSSTv5'
+#' nc_path_dir = '/home/data/ERSSTv5'
 #' nc_file_fromat = 'ersst.v5.%s%s.nc'
 #' years_range = c(1981, 2020)
 #' region_bbox = c(-170, -5, -120, 5)
 #' 
-#' grd_data = get_month_region_netcdf_data(7, path_dir_data, nc_file_fromat,
+#' grd_data = get_month_region_netcdf_data(7, nc_path_dir, nc_file_fromat,
 #'                                         years_range, region_bbox)
+#' 
+#' # Extracting the U-wind data for July for the period 1981-2020 at 850 hPa
+#' # over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
+#' 
+#' nc_path_dir = '/home/data/MONTHLY/UGRD'
+#' nc_file_fromat = 'u_%s%s.nc'
+#' years_range = c(1981, 2020)
+#' region_bbox = c(-170, -5, -120, 5)
+#' 
+#' ugrd_data = get_month_region_netcdf_data(7, nc_path_dir, nc_file_fromat,
+#'                                          years_range, region_bbox,
+#'                                          alt_name = 'P', alt_value = 850)
 #' }
 #' 
 #' @export
 
-get_month_region_netcdf_data <- function(month, path_dir_data, nc_file_fromat,
+get_month_region_netcdf_data <- function(month, nc_path_dir, nc_file_fromat,
                                          years_range = NULL, region_bbox = NULL,
-                                         var_name = NA, lon_name = NA,
-                                         lat_name = NA)
+                                         var_name = NA, lon_name = NA, lat_name = NA,
+                                         ...)
 {
     month <- as.numeric(month)
     if(month < 1 || month > 12) stop('Invalid month.')
 
     pattern <- format_pattern(nc_file_fromat)
     pattern <- gsub('%s', '.+', pattern)
-    ncfiles <- list.files(path_dir_data, pattern = pattern)
+    ncfiles <- list.files(nc_path_dir, pattern = pattern)
     if(length(ncfiles) == 0) stop('No netCDF files found.')
 
     dates <- extract_filename_dates(ncfiles, nc_file_fromat)
@@ -68,62 +86,20 @@ get_month_region_netcdf_data <- function(month, path_dir_data, nc_file_fromat,
     ncfiles <- sprintf(nc_file_fromat, years[imy], months[imy])
     dates <- dates[imy]
 
-    nc <- ncdf4::nc_open(file.path(path_dir_data, ncfiles[1]))
-    if(is.na(lon_name) || is.na(lat_name)){
-        xy_name <- get_latlon_dimnames(nc)
-        lon_name <- xy_name$lon
-        lat_name <- xy_name$lat
-    }
-
-    lon <- nc$dim[[lon_name]]$vals
-    lon <- format_longitude(lon)
-    lat <- nc$dim[[lat_name]]$vals
-
-    if(is.na(var_name)){
-        var_name <- nc$var[[1]]$name
-    }
-    xy_order <- get_latlon_order(nc, var_name, lon_name, lat_name)
+    nc <- ncdf4::nc_open(file.path(nc_path_dir, ncfiles[1]))
+    info <- get_dim_infos_extract(nc, var_name, lon_name, lat_name, region_bbox, ...)
     ncdf4::nc_close(nc)
 
-    if(!is.null(region_bbox)){
-        region_bbox[1] <- format_longitude(region_bbox[1])
-        region_bbox[3] <- format_longitude(region_bbox[3])
-        ix <- lon >= region_bbox[1] & lon <= region_bbox[3]
-        iy <- lat >= region_bbox[2] & lat <= region_bbox[4]
-        lon <- lon[ix]
-        lat <- lat[iy]
-    }else{
-        ix <- rep(TRUE, length(lon))
-        iy <- rep(TRUE, length(lat))
-        rx <- range(lon)
-        ry <- range(lat)
-        region_bbox <- c(rx[1], ry[1], rx[2], ry[2])
-    }
-
-    ox <- order(lon)
-    oy <- order(lat)
-    lon <- lon[ox]
-    lat <- lat[oy]
-
     don <- lapply(seq_along(ncfiles), function(i){
-        nc <- ncdf4::nc_open(file.path(path_dir_data, ncfiles[i]))
-        z <- ncdf4::ncvar_get(nc, varid = var_name)
+        nc <- ncdf4::nc_open(file.path(nc_path_dir, ncfiles[i]))
+        z <- ncdf4::ncvar_get(nc, varid = info$varid, collapse_degen = FALSE)
         ncdf4::nc_close(nc)
-        if(xy_order$ilon < xy_order$ilat){
-            z <- z[ix, iy, drop = FALSE]
-            z <- z[ox, oy, drop = FALSE]
-        }else{
-            z <- z[iy, ix, drop = FALSE]
-            z <- z[oy, ox, drop = FALSE]
-            z <- t(z)
-        }
-        z
+        extract_nc_data(z, info)
     })
     names(don) <- format(dates, '%Y-%m')
 
-    out <- list(lon = lon, lat = lat, date = dates, data = don,
-                time_res = 'monthly', month = month, bbox = region_bbox)
-
+    out <- list(lon = info$lon, lat = info$lat, date = dates, data = don,
+                time_res = 'monthly', month = month, bbox = info$bbox)
     assign_class(out, 'scda_data')
 }
 
@@ -132,7 +108,7 @@ get_month_region_netcdf_data <- function(month, path_dir_data, nc_file_fromat,
 #' Read seasonal netCDF data for a specific season over a defined region.
 #' 
 #' @param season character, the season to be read, in the format \code{"start_month-end_month"}, e.g. "12-02" for DJF.
-#' @param path_dir_data character, full path to the folder containing the netCDF files.
+#' @param nc_path_dir character, full path to the folder containing the netCDF files.
 #' @param nc_file_fromat character, format of the netCDF file name, the year and month must be replaced by \code{\%s}.
 #' Example: for \emph{ersstv5_2024-01_2024-03.nc} the file name format should be \emph{'ersstv5_\%s-\%s_\%s-\%s.nc'}.
 #' @param years_range an integer vector of length 2, the start and end year of the data to be extracted.
@@ -144,6 +120,12 @@ get_month_region_netcdf_data <- function(month, path_dir_data, nc_file_fromat,
 #' the first variable available in the netCDF data will be taken.
 #' @param lon_name character, the name of the longitude dimension. If unspecified or left \code{NA}, it will be detected. 
 #' @param lat_name character, the name of the latitude dimension. Same as \code{lon_name}.
+#' @param ... pairs of arguments, providing the names and values of any extra dimensions to be extracted.
+#' The arguments should be in the format \code{<information about the dimension>_name} for the name of the dimension
+#' and \code{<information about the dimension>_value} for the value to be extracted from that dimension.
+#' Example: if your netCDF data has a pressure levels dimension named \code{"pres"} having the values from 1000 to 10 hPa,
+#' if you want to extract the data at the pressure level 850 hPa, 
+#' the pair of arguments would be \code{plev_name = "pres"} and \code{plev_value = 850}.
 #' 
 #' @return This returns an object of class \code{scda_data}. The object has the following elements:
 #' \itemize{
@@ -158,28 +140,28 @@ get_month_region_netcdf_data <- function(month, path_dir_data, nc_file_fromat,
 #' # Extracting the SST data for the season DJF for the period 1981-2020 
 #' # over the region: longitude [170 W - 120 W] and latitude [5 S - 5 N]
 #' 
-#' path_dir_data = '/home/data/ERSSTv5_seasonal'
+#' nc_path_dir = '/home/data/ERSSTv5_seasonal'
 #' nc_file_fromat = 'ersstv5_%s-%s_%s-%s.nc'
 #' years_range = c(1981, 2020)
 #' region_bbox = c(-170, -5, -120, 5)
 #' 
-#' grd_data = get_season_region_netcdf_data("12-02", path_dir_data, nc_file_fromat,
+#' grd_data = get_season_region_netcdf_data("12-02", nc_path_dir, nc_file_fromat,
 #'                                         years_range, region_bbox)
 #' }
 #' 
 #' @export
 
-get_season_region_netcdf_data <- function(season, path_dir_data, nc_file_fromat,
+get_season_region_netcdf_data <- function(season, nc_path_dir, nc_file_fromat,
                                           years_range = NULL, region_bbox = NULL,
-                                          var_name = NA, lon_name = NA,
-                                          lat_name = NA)
+                                          var_name = NA, lon_name = NA, lat_name = NA,
+                                          ...)
 {
     season <- as.numeric(strsplit(season, '-')[[1]])
     if(any(season < 1 | season > 12)) stop('Invalid season.')
 
     pattern <- format_pattern(nc_file_fromat)
     pattern <- gsub('%s', '.+', pattern)
-    ncfiles <- list.files(path_dir_data, pattern = pattern)
+    ncfiles <- list.files(nc_path_dir, pattern = pattern)
     if(length(ncfiles) == 0) stop('No netCDF files found.')
 
     dates <- extract_filename_dates(ncfiles, nc_file_fromat)
@@ -202,67 +184,24 @@ get_season_region_netcdf_data <- function(season, path_dir_data, nc_file_fromat,
     lname <- season_filename_dates(dates)
     dates <- season_middle_dates(dates)
 
-    nc <- ncdf4::nc_open(file.path(path_dir_data, ncfiles[1]))
-    if(is.na(lon_name) || is.na(lat_name)){
-        xy_name <- get_latlon_dimnames(nc)
-        lon_name <- xy_name$lon
-        lat_name <- xy_name$lat
-    }
-
-    lon <- nc$dim[[lon_name]]$vals
-    lon <- format_longitude(lon)
-    lat <- nc$dim[[lat_name]]$vals
-
-    if(is.na(var_name)){
-        var_name <- nc$var[[1]]$name
-    }
-    xy_order <- get_latlon_order(nc, var_name, lon_name, lat_name)
+    nc <- ncdf4::nc_open(file.path(nc_path_dir, ncfiles[1]))
+    info <- get_dim_infos_extract(nc, var_name, lon_name, lat_name, region_bbox, ...)
     ncdf4::nc_close(nc)
 
-    if(!is.null(region_bbox)){
-        region_bbox[1] <- format_longitude(region_bbox[1])
-        region_bbox[3] <- format_longitude(region_bbox[3])
-        ix <- lon >= region_bbox[1] & lon <= region_bbox[3]
-        iy <- lat >= region_bbox[2] & lat <= region_bbox[4]
-        lon <- lon[ix]
-        lat <- lat[iy]
-    }else{
-        ix <- rep(TRUE, length(lon))
-        iy <- rep(TRUE, length(lat))
-        rx <- range(lon)
-        ry <- range(lat)
-        region_bbox <- c(rx[1], ry[1], rx[2], ry[2])
-    }
-
-    ox <- order(lon)
-    oy <- order(lat)
-    lon <- lon[ox]
-    lat <- lat[oy]
-
     don <- lapply(seq_along(ncfiles), function(i){
-        nc <- ncdf4::nc_open(file.path(path_dir_data, ncfiles[i]))
-        z <- ncdf4::ncvar_get(nc, varid = var_name)
+        nc <- ncdf4::nc_open(file.path(nc_path_dir, ncfiles[i]))
+        z <- ncdf4::ncvar_get(nc, varid = info$varid, collapse_degen = FALSE)
         ncdf4::nc_close(nc)
-        if(xy_order$ilon < xy_order$ilat){
-            z <- z[ix, iy, drop = FALSE]
-            z <- z[ox, oy, drop = FALSE]
-        }else{
-            z <- z[iy, ix, drop = FALSE]
-            z <- z[oy, ox, drop = FALSE]
-            z <- t(z)
-        }
-        z
+        extract_nc_data(z, info)
     })
     names(don) <- lname
 
     start <- season[1]
     len <- (season[2] - season[1]) %% 12 + 1
     season <- sprintf('%02d-%02d', season[1], season[2])
-    out <- list(lon = lon, lat = lat, date = dates, data = don,
+    out <- list(lon = info$lon, lat = info$lat, date = dates, data = don,
                 time_res = 'seasonal', season = season,
-                season_start = start, season_length = len,
-                bbox = region_bbox)
-
+                season_start = start, season_length = len, bbox = info$bbox)
     assign_class(out, 'scda_data')
 }
 
@@ -270,7 +209,7 @@ get_season_region_netcdf_data <- function(season, path_dir_data, nc_file_fromat,
 #'
 #' Read annual netCDF data over a defined region.
 #' 
-#' @param path_dir_data character, full path to the folder containing the netCDF files.
+#' @param nc_path_dir character, full path to the folder containing the netCDF files.
 #' @param nc_file_fromat character, format of the netCDF file name, the year must be replaced by \code{\%s}.
 #' Example: for \emph{chirps_2024.nc} the file name format should be \emph{'chirps_\%s.nc'}.
 #' @param years_range an integer vector of length 2, the start and end year of the data to be extracted.
@@ -282,6 +221,12 @@ get_season_region_netcdf_data <- function(season, path_dir_data, nc_file_fromat,
 #' the first variable available in the netCDF data will be taken.
 #' @param lon_name character, the name of the longitude dimension. If unspecified or left \code{NA}, it will be detected. 
 #' @param lat_name character, the name of the latitude dimension. Same as \code{lon_name}.
+#' @param ... pairs of arguments, providing the names and values of any extra dimensions to be extracted.
+#' The arguments should be in the format \code{<information about the dimension>_name} for the name of the dimension
+#' and \code{<information about the dimension>_value} for the value to be extracted from that dimension.
+#' Example: if your netCDF data has a pressure levels dimension named \code{"pres"} having the values from 1000 to 10 hPa,
+#' if you want to extract the data at the pressure level 850 hPa, 
+#' the pair of arguments would be \code{plev_name = "pres"} and \code{plev_value = 850}.
 #' 
 #' @return This returns an object of class \code{scda_data}. The object has the following elements:
 #' \itemize{
@@ -296,25 +241,25 @@ get_season_region_netcdf_data <- function(season, path_dir_data, nc_file_fromat,
 #' # Extracting CHIRPSv2.0 annual rainfall from global data for the period 1991-2020 
 #' # over Madagascar: longitude [42 E - 52 E] and latitude [26 S - 11.5 S]
 #' 
-#' path_dir_data = '/home/data/CHIRPSv2.0_annual'
+#' nc_path_dir = '/home/data/CHIRPSv2.0_annual'
 #' nc_file_fromat = 'chirps_%s.nc'
 #' years_range = c(1991, 2020)
 #' region_bbox = c(42, -26, 52, -11.5)
 #' 
-#' grd_data = get_annual_region_netcdf_data(path_dir_data, nc_file_fromat,
+#' grd_data = get_annual_region_netcdf_data(nc_path_dir, nc_file_fromat,
 #'                                         years_range, region_bbox)
 #' }
 #' 
 #' @export
 
-get_annual_region_netcdf_data <- function(path_dir_data, nc_file_fromat,
+get_annual_region_netcdf_data <- function(nc_path_dir, nc_file_fromat,
                                           years_range = NULL, region_bbox = NULL,
-                                          var_name = NA, lon_name = NA,
-                                          lat_name = NA)
+                                          var_name = NA, lon_name = NA, lat_name = NA,
+                                          ...)
 {
     pattern <- format_pattern(nc_file_fromat)
     pattern <- gsub('%s', '.+', pattern)
-    ncfiles <- list.files(path_dir_data, pattern = pattern)
+    ncfiles <- list.files(nc_path_dir, pattern = pattern)
     if(length(ncfiles) == 0) stop('No netCDF files found.')
 
     dates <- extract_filename_dates(ncfiles, nc_file_fromat)
@@ -330,61 +275,19 @@ get_annual_region_netcdf_data <- function(path_dir_data, nc_file_fromat,
     ncfiles <- sprintf(nc_file_fromat, years[iy])
     dates <- dates[iy]
 
-    nc <- ncdf4::nc_open(file.path(path_dir_data, ncfiles[1]))
-    if(is.na(lon_name) || is.na(lat_name)){
-        xy_name <- get_latlon_dimnames(nc)
-        lon_name <- xy_name$lon
-        lat_name <- xy_name$lat
-    }
-
-    lon <- nc$dim[[lon_name]]$vals
-    lon <- format_longitude(lon)
-    lat <- nc$dim[[lat_name]]$vals
-
-    if(is.na(var_name)){
-        var_name <- nc$var[[1]]$name
-    }
-    xy_order <- get_latlon_order(nc, var_name, lon_name, lat_name)
+    nc <- ncdf4::nc_open(file.path(nc_path_dir, ncfiles[1]))
+    info <- get_dim_infos_extract(nc, var_name, lon_name, lat_name, region_bbox, ...)
     ncdf4::nc_close(nc)
 
-    if(!is.null(region_bbox)){
-        region_bbox[1] <- format_longitude(region_bbox[1])
-        region_bbox[3] <- format_longitude(region_bbox[3])
-        ix <- lon >= region_bbox[1] & lon <= region_bbox[3]
-        iy <- lat >= region_bbox[2] & lat <= region_bbox[4]
-        lon <- lon[ix]
-        lat <- lat[iy]
-    }else{
-        ix <- rep(TRUE, length(lon))
-        iy <- rep(TRUE, length(lat))
-        rx <- range(lon)
-        ry <- range(lat)
-        region_bbox <- c(rx[1], ry[1], rx[2], ry[2])
-    }
-
-    ox <- order(lon)
-    oy <- order(lat)
-    lon <- lon[ox]
-    lat <- lat[oy]
-
     don <- lapply(seq_along(ncfiles), function(i){
-        nc <- ncdf4::nc_open(file.path(path_dir_data, ncfiles[i]))
-        z <- ncdf4::ncvar_get(nc, varid = var_name)
+        nc <- ncdf4::nc_open(file.path(nc_path_dir, ncfiles[i]))
+        z <- ncdf4::ncvar_get(nc, varid = info$varid, collapse_degen = FALSE)
         ncdf4::nc_close(nc)
-        if(xy_order$ilon < xy_order$ilat){
-            z <- z[ix, iy, drop = FALSE]
-            z <- z[ox, oy, drop = FALSE]
-        }else{
-            z <- z[iy, ix, drop = FALSE]
-            z <- z[oy, ox, drop = FALSE]
-            z <- t(z)
-        }
-        z
+        extract_nc_data(z, info)
     })
     names(don) <- format(dates, '%Y')
 
-    out <- list(lon = lon, lat = lat, date = dates, data = don,
-                time_res = 'annual', bbox = region_bbox)
-
+    out <- list(lon = info$lon, lat = info$lat, date = dates, data = don,
+                time_res = 'annual', bbox = info$bbox)
     assign_class(out, 'scda_data')
 }
